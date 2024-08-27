@@ -77,7 +77,10 @@ const generateToken = (user) => {
 const resolvers = {
   Upload: GraphQLUpload,
   Query: {
-    getPet: async (_, { id }) => {
+    getPet: async (_, { id }, context) => {
+      if (!context.user) {
+        throw new Error('Not authenticated');
+      }
       return await Pet.findById(id);
     },
     listPets: async () => {
