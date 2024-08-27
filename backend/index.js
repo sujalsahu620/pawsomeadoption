@@ -1,32 +1,21 @@
-// api/graphql.js
-import { ApolloServer } from "apollo-server-micro";
-import { typeDefs, resolvers } from "../schema"; // Adjust the path if needed
-import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
+// index.js
+require("dotenv").config();
+const express = require("express");
+const { ApolloServer } = require("apollo-server-express");
+const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
+const { typeDefs, resolvers } = require("./schema"); // Import typeDefs and resolvers
 
-const server = new ApolloServer({
-  typeDefs,
-  resolvers,
-  context: ({ req }) => ({
-    user: req.user,
-  }),
-});
+const app = express();
 
-const startServer = async () => {
-  // Connect to MongoDB
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log("MongoDB connected");
-  }
-
-  await server.start();
-};
+// Connect to MongoDB
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
 
 // Middleware to handle JWT authentication
-const middleware = (handler) => async (req, res) => {
+app.use((req, res, next) => {
   const token = req.headers.authorization || "";
   if (token) {
     try {
@@ -39,16 +28,29 @@ const middleware = (handler) => async (req, res) => {
       console.error("Failed to authenticate token:", err);
     }
   }
-  await handler(req, res);
-};
+  next();
+});
 
-export default async (req, res) => {
-  await startServer();
-  return middleware(server.createHandler({ path: "/api/graphql" }))(req, res);
-};
+// Initialize Apollo Server
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  context: ({ req }) => ({
+    user: req.user,
+  }),
+});
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Apply Apollo GraphQL middleware
+server.start().then(() => {
+  server.applyMiddleware({ app });
+
+  // Listen on a specific port for development
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(
+      `Server is running on http://localhost:${PORT}${server.graphqlPath}`
+    );
+  });
+});
+
+module.exports = app;
