@@ -9,13 +9,9 @@ const { typeDefs, resolvers } = require("./schema");
 
 const app = express();
 // Connect to MongoDB
-mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Middleware for handling file uploads
 app.use(graphqlUploadExpress({ maxFileSize: 10000000, maxFiles: 10 }));

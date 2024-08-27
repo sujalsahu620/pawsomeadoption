@@ -1,13 +1,15 @@
 // schema.js
-const { gql } = require('apollo-server-express');
-const User = require('./models/User');
-const Pet = require('./models/Pet');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-const { GraphQLUpload } = require('graphql-upload');
-const { uploadImage } = require('./s3');
+const { gql } = require("apollo-server-express");
+const User = require("./models/User");
+const Pet = require("./models/Pet");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
+const { GraphQLUpload } = require("graphql-upload");
+const { uploadImage } = require("./s3");
+
+// schema.js
 
 const typeDefs = gql`
   scalar Upload
@@ -29,6 +31,21 @@ const typeDefs = gql`
     username: String!
     email: String!
     token: String
+  }
+
+  type PetEdge {
+    cursor: ID!
+    node: Pet!
+  }
+
+  type PetConnection {
+    edges: [PetEdge!]!
+    pageInfo: PageInfo!
+  }
+
+  type PageInfo {
+    endCursor: ID
+    hasNextPage: Boolean!
   }
 
   input PetInput {
@@ -53,7 +70,7 @@ const typeDefs = gql`
 
   type Query {
     getPet(id: ID!): Pet
-    listPets: [Pet]
+    listPets(first: Int, after: ID): PetConnection!
     me: User
   }
 
@@ -66,16 +83,15 @@ const typeDefs = gql`
   }
 `;
 
+module.exports = typeDefs;
+
 const generateToken = (user) => {
-  return jwt.sign(
-    { id: user._id, email: user.email },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
-  );
+  return jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
 };
 
+// schema.js (Resolvers)
+
 const resolvers = {
-  Upload: GraphQLUpload,
   Query: {
     getPet: async (_, { id }, context) => {
       if (!context.user) {
@@ -83,8 +99,25 @@ const resolvers = {
       }
       return await Pet.findById(id);
     },
-    listPets: async () => {
-      return await Pet.find();
+    listPets: async (_, { first = 10, after }, context) => {
+      const query = after ? { _id: { $gt: after } } : {};
+
+      const pets = await Pet.find(query).limit(first + 1).sort({ _id: 1 });
+
+      const hasNextPage = pets.length > first;
+      const edges = hasNextPage ? pets.slice(0, -1) : pets;
+      const endCursor = edges.length > 0 ? edges[edges.length - 1]._id : null;
+
+      return {
+        edges: edges.map(pet => ({
+          cursor: pet._id.toString(),
+          node: pet,
+        })),
+        pageInfo: {
+          endCursor,
+          hasNextPage,
+        },
+      };
     },
     me: async (_, __, context) => {
       if (!context.user) throw new Error('Not authenticated');
@@ -173,12 +206,10 @@ const resolvers = {
 
       // Set up Nodemailer transporter
       const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587, // or 465 for SSL
-        secure: false, // true for 465, false for other ports
+        service: process.env.EMAIL_SERVICE,
         auth: {
-          user: process.env.EMAIL_USERNAME, // Your Gmail address
-          pass: process.env.EMAIL_PASSWORD, // Your Gmail app password
+          user: process.env.EMAIL_USERNAME,
+          pass: process.env.EMAIL_PASSWORD,
         },
       });
 
@@ -227,3 +258,4 @@ const resolvers = {
 };
 
 module.exports = { typeDefs, resolvers };
+
