@@ -1,5 +1,5 @@
 import { ApolloServer } from "apollo-server-micro";
-import { typeDefs, resolvers } from "./schema"; // Adjust the path if needed
+import { typeDefs, resolvers } from "../schema"; // Adjust the path if needed
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import { createServer } from "http";
