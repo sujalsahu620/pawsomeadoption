@@ -18,10 +18,7 @@ const startServer = async () => {
     isApolloServerStarted = true;
 
     if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-      });
+      await mongoose.connect(process.env.MONGODB_URI);
       console.log("MongoDB connected");
     }
   }
