@@ -9,8 +9,6 @@ const nodemailer = require("nodemailer");
 const { GraphQLUpload } = require("graphql-upload");
 const { uploadImage } = require("./s3");
 
-// schema.js
-
 const typeDefs = gql`
   scalar Upload
 
@@ -31,6 +29,7 @@ const typeDefs = gql`
     username: String!
     email: String!
     token: String
+    wishlist: [Pet] # This will be populated with the Pet objects
   }
 
   type PetEdge {
@@ -72,6 +71,7 @@ const typeDefs = gql`
     getPet(id: ID!): Pet
     listPets(first: Int, after: ID): PetConnection!
     me: User
+    listWishlist(first: Int, after: ID): PetConnection!
   }
 
   type Mutation {
@@ -80,18 +80,18 @@ const typeDefs = gql`
     signIn(signInInput: SignInInput!): User
     forgotPassword(email: String!): String
     resetPassword(token: String!, password: String!): String
+    addToWishlist(petId: ID!): User
+    removeFromWishlist(petId: ID!): User
   }
 `;
-
-module.exports = typeDefs;
 
 const generateToken = (user) => {
   return jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
 };
 
-// schema.js (Resolvers)
-
 const resolvers = {
+  Upload: GraphQLUpload,
+
   Query: {
     getPet: async (_, { id }, context) => {
       if (!context.user) {
@@ -99,6 +99,7 @@ const resolvers = {
       }
       return await Pet.findById(id);
     },
+
     listPets: async (_, { first = 10, after }, context) => {
       const query = after ? { _id: { $gt: after } } : {};
 
@@ -119,11 +120,44 @@ const resolvers = {
         },
       };
     },
+
     me: async (_, __, context) => {
       if (!context.user) throw new Error('Not authenticated');
-      return await User.findById(context.user.id);
+      return await User.findById(context.user.id).populate('wishlist');
+    },
+
+    listWishlist: async (_, { first = 10, after }, context) => {
+      if (!context.user) throw new Error('Not authenticated');
+
+      // Find the user and populate the wishlist
+      const user = await User.findById(context.user.id).populate('wishlist');
+
+      // Filter and paginate the wishlist
+      let wishlist = user.wishlist;
+
+      if (after) {
+        wishlist = wishlist.filter(pet => pet._id.toString() > after);
+      }
+
+      const paginatedPets = wishlist.slice(0, first + 1);
+
+      const hasNextPage = paginatedPets.length > first;
+      const edges = hasNextPage ? paginatedPets.slice(0, -1) : paginatedPets;
+      const endCursor = edges.length > 0 ? edges[edges.length - 1]._id.toString() : null;
+
+      return {
+        edges: edges.map(pet => ({
+          cursor: pet._id.toString(),
+          node: pet,
+        })),
+        pageInfo: {
+          endCursor,
+          hasNextPage,
+        },
+      };
     },
   },
+
   Mutation: {
     createPet: async (_, { petInput, images }, context) => {
       if (!context.user) throw new Error('Not authenticated');
@@ -254,8 +288,34 @@ const resolvers = {
 
       return 'Password reset successful';
     },
+
+    addToWishlist: async (_, { petId }, context) => {
+      if (!context.user) {
+        throw new Error('Not authenticated');
+      }
+
+      const user = await User.findById(context.user.id);
+
+      if (!user.wishlist.includes(petId)) {
+        user.wishlist.push(petId);
+        await user.save();
+      }
+
+      return user.populate('wishlist');
+    },
+
+    removeFromWishlist: async (_, { petId }, context) => {
+      if (!context.user) {
+        throw new Error('Not authenticated');
+      }
+
+      const user = await User.findById(context.user.id);
+      user.wishlist = user.wishlist.filter(id => id.toString() !== petId);
+      await user.save();
+
+      return user.populate('wishlist');
+    },
   },
 };
 
 module.exports = { typeDefs, resolvers };
-

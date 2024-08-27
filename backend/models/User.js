@@ -1,4 +1,3 @@
-// models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -9,6 +8,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   resetPasswordToken: String,
   resetPasswordExpires: Date,
+  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pet' }] // Array of pet IDs
 });
 
 // Hash the password before saving the user
