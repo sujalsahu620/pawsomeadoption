@@ -4,16 +4,18 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "nodemon": "nodemon index.js"
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.637.0",
     "apollo-server-express": "^3.13.0",
     "aws-sdk": "^2.1682.0",
     "bcryptjs": "^2.4.3",
+    "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "form-data": "^4.0.0",
