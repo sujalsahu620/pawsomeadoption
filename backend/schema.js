@@ -1,6 +1,6 @@
 const { gql } = require("apollo-server-express");
 const User = require("./models/User");
-const Pet = require("./models/Pet");
+const Pet = require("./models/pet");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
