@@ -1,12 +1,10 @@
 const { gql } = require("apollo-server-express");
 const User = require("./models/User");
-const Pet = require("./models/pet");
+const Pet = require("./models/Pet");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
-const { uploadImage } = require("./s3");
-const { GraphQLUpload } = require('apollo-server-express'); // Use Apollo Server's Upload
 
 const typeDefs = gql`
   type Pet {
@@ -20,28 +18,16 @@ const typeDefs = gql`
     images: [String]!
     timestamp: String!
   }
-
+type AuthPayload {
+  accessToken: String
+  refreshToken: String
+}
   type User {
     id: ID!
     username: String!
     email: String!
     token: String
     wishlist: [Pet]
-  }
-
-  type PetEdge {
-    cursor: ID!
-    node: Pet!
-  }
-
-  type PetConnection {
-    edges: [PetEdge!]!
-    pageInfo: PageInfo!
-  }
-
-  type PageInfo {
-    endCursor: ID
-    hasNextPage: Boolean!
   }
 
   input PetInput {
@@ -66,12 +52,13 @@ const typeDefs = gql`
 
   type Query {
     getPet(id: ID!): Pet
-    listPets(first: Int, after: ID): PetConnection!
+    listPets(first: Int, after: ID): [Pet!]!
     me: User
-    listWishlist(first: Int, after: ID): PetConnection!
+    listWishlist(first: Int, after: ID): [Pet!]!
   }
 
   type Mutation {
+    refreshToken(token: String!): AuthPayload
     createPet(petInput: PetInput, images: [String!]!): Pet
     signUp(signUpInput: SignUpInput!): User
     signIn(signInInput: SignInInput!): User
@@ -82,14 +69,16 @@ const typeDefs = gql`
   }
 `;
 
-// Your resolvers code remains the same
 
 const generateToken = (user) => {
-  return jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
-};
+  const accessToken = jwt.sign(
+    { id: user._id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' }
+  );
 
+  return accessToken; // Ensure you return the accessToken here
+};
 const resolvers = {
   Query: {
     getPet: async (_, { id }, context) => {
@@ -158,27 +147,31 @@ const resolvers = {
   },
 
   Mutation: {
+    refreshToken: async (_, { token }) => {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id);
+        if (!user) {
+          throw new Error('User not found');
+        }
+  
+        const newTokens = generateToken(user);
+        return {
+          accessToken: newTokens.accessToken,
+          refreshToken: newTokens.refreshToken,
+        };
+      } catch (err) {
+        throw new Error('Invalid token');
+      }
+    },
     createPet: async (_, { petInput, images }, context) => {
       if (!context.user) throw new Error("Not authenticated");
 
-      const imageUrls = [];
-      for (let image of images) {
-        const { createReadStream, filename, mimetype } = await image;
-        const fileStream = createReadStream();
-        const chunks = [];
-        for await (const chunk of fileStream) {
-          chunks.push(chunk);
-        }
-        const buffer = Buffer.concat(chunks);
-        const imageUrl = await uploadImage({
-          buffer,
-          originalname: filename,
-          mimetype,
-        });
-        imageUrls.push(imageUrl);
-      }
-
-      const pet = new Pet({ ...petInput, images: imageUrls });
+      const pet = new Pet({
+        ...petInput,
+        images,
+        timestamp: new Date().toISOString(),
+      });
       return await pet.save();
     },
 
@@ -209,24 +202,24 @@ const resolvers = {
     signIn: async (_, { signInInput }) => {
       const { email, password } = signInInput;
       const user = await User.findOne({ email });
-
+    
       if (!user) {
         throw new Error("User not found");
       }
-
+    
       const isPasswordCorrect = await user.matchPassword(password);
-
+    
       if (!isPasswordCorrect) {
         throw new Error("Invalid credentials");
       }
-
+    
       const token = generateToken(user);
-
+    
       return {
         id: user._id,
         username: user.username,
         email: user.email,
-        token,
+        token, // Ensure this token is properly generated and returned
       };
     },
 

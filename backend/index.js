@@ -1,10 +1,12 @@
-// index.js
 require("dotenv").config();
 const express = require("express");
 const { ApolloServer } = require("apollo-server-express");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const { typeDefs, resolvers } = require("./schema"); // Import typeDefs and resolvers
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const { typeDefs, resolvers } = require("./schema");
 
 const app = express();
 
@@ -17,26 +19,68 @@ mongoose
 // Middleware to handle JWT authentication
 app.use((req, res, next) => {
   const token = req.headers.authorization || "";
-  if (token) {
+  console.log("Received Authorization Header:", token); // Debugging log
+
+  if (token.startsWith("Bearer ")) {
+    const strippedToken = token.replace("Bearer ", "").trim();
+    console.log("Stripped Token:", strippedToken); // Debugging log
+
     try {
-      const decoded = jwt.verify(
-        token.replace("Bearer ", ""),
-        process.env.JWT_SECRET
-      );
+      const decoded = jwt.verify(strippedToken, process.env.JWT_SECRET);
+      console.log("Decoded JWT Payload:", decoded); // Debugging log
       req.user = decoded;
+      next(); // Proceed to the next middleware or route handler
     } catch (err) {
-      console.error("Failed to authenticate token:", err);
+      if (err.name === 'TokenExpiredError') {
+        console.error("Token expired at:", err.expiredAt);
+        return res.status(401).json({ message: "Token expired, please log in again." });
+      }
+      console.error("JWT Verification Error:", err.message);
+      return res.status(401).json({ message: "Failed to authenticate token." });
     }
+  } else {
+    if (token) {
+      console.error("Token not in Bearer format");
+      return res.status(401).json({ message: "Invalid token format." });
+    }
+    next();
   }
-  next();
 });
+
+// Set up Multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, "uploads/");
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({ storage });
+
+// File upload route
+app.post("/upload", upload.single("image"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const imageUrl = `/uploads/${req.file.filename}`;
+  res.status(200).json({ url: imageUrl });
+});
+
+// Serve static files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Initialize Apollo Server
 const server = new ApolloServer({
   typeDefs,
   resolvers,
   context: ({ req }) => ({
-    user: req.user,
+    user: req.user, // Attach user information to the context
   }),
 });
 
@@ -54,53 +98,3 @@ server.start().then(() => {
 });
 
 module.exports = app;
-
-// import { ApolloServer } from "apollo-server-micro";
-// import { typeDefs, resolvers } from "./schema"; // Adjust the path if needed
-// import jwt from "jsonwebtoken";
-// import mongoose from "mongoose";
-// import { createServer } from "http";
-// import { parse } from "url";
-
-// const apolloServer = new ApolloServer({
-//   typeDefs,
-//   resolvers,
-//   context: ({ req }) => ({
-//     user: req.user,
-//   }),
-// });
-
-// const startServer = async () => {
-//   if (mongoose.connection.readyState === 0) {
-//     await mongoose.connect(process.env.MONGODB_URI, {
-//       useNewUrlParser: true,
-//       useUnifiedTopology: true,
-//     });
-//     console.log("MongoDB connected");
-//   }
-
-//   await apolloServer.start();
-// };
-
-// const serverHandler = async (req, res) => {
-//   await startServer();
-
-//   const { query } = parse(req.url, true);
-
-//   if (query && query.graphql) {
-//     return apolloServer.createHandler({
-//       path: "/api/graphql",
-//     })(req, res);
-//   }
-
-//   res.statusCode = 404;
-//   res.end("Not Found");
-// };
-
-// export default serverHandler;
-
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// };
