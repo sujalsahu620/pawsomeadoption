@@ -1,10 +1,10 @@
-import Home from "@/components/pages/Home";
+import CreatePost from "@/components/CreatePost";
 import React from "react";
 
 export default function Page() {
   return (
     <div>
-      <Home />
+      <CreatePost/>
     </div>
   );
 }

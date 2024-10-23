@@ -27,6 +27,7 @@ const SIGNUP_MUTATION = gql`
       email
       name
       phoneNumber
+      token
     }
   }
 `;
@@ -57,7 +58,7 @@ export const AuthProvider = ({ children }) => {
         const token = data.login.token;
         setUser({ token });
         localStorage.setItem("token", token); // Persist the token in localStorage
-        router.push("/dashboard"); // Redirect after successful login
+        router.push("/"); // Redirect after successful login
       } else {
         console.error("No token returned");
       }
@@ -74,12 +75,11 @@ export const AuthProvider = ({ children }) => {
         mutation: SIGNUP_MUTATION,
         variables: { name, email, password, phoneNumber },
       });
-
+  
       if (data.register && data.register.token) {
         const token = data.register.token;
         setUser({ token });
         localStorage.setItem("token", token); // Persist the token in localStorage
-        router.push("/dashboard"); // Redirect after successful signup
       } else {
         console.error("No token returned");
       }
@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem("token"); // Remove the token from localStorage
-    router.push("/login"); // Redirect to login page after logout
+    router.push("/"); // Redirect to login page after logout
   };
 
   // The AuthContext provider that wraps the children components
